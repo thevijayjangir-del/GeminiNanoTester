@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Debug
 import android.os.SystemClock
+import android.content.pm.PackageInfo
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -16,7 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,7 +27,7 @@ class MainActivity : AppCompatActivity() {
         Generation.getClient()
     }
 
-    private var lastReport = ""
+    private var lastReport: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +37,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(32, 32, 32, 32)
         }
 
-        val scroll = ScrollView(this)
+        val scrollView = ScrollView(this)
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -45,19 +46,19 @@ class MainActivity : AppCompatActivity() {
         val title = TextView(this).apply {
             text = "Gemini Nano AI Benchmark"
             textSize = 27f
-            setPadding(0, 0, 0, 24)
+            setPadding(0, 0, 0, 20)
         }
 
         val subtitle = TextView(this).apply {
-            text = "On-device GenAI performance test"
+            text = "On-device GenAI performance tester"
             textSize = 16f
             setPadding(0, 0, 0, 20)
         }
 
-        val device = TextView(this).apply {
-            text = buildDeviceInfo()
+        val deviceInfo = TextView(this).apply {
+            text = buildDeviceReport()
             textSize = 15f
-            setPadding(0, 0, 0, 24)
+            setPadding(0, 0, 0, 20)
         }
 
         val availabilityButton = Button(this).apply {
@@ -69,7 +70,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val copyButton = Button(this).apply {
-            text = "COPY BENCHMARK REPORT"
+            text = "COPY REPORT"
         }
 
         resultText = TextView(this).apply {
@@ -80,14 +81,14 @@ class MainActivity : AppCompatActivity() {
 
         content.addView(title)
         content.addView(subtitle)
-        content.addView(device)
+        content.addView(deviceInfo)
         content.addView(availabilityButton)
         content.addView(benchmarkButton)
         content.addView(copyButton)
         content.addView(resultText)
 
-        scroll.addView(content)
-        root.addView(scroll)
+        scrollView.addView(content)
+        root.addView(scrollView)
 
         setContentView(root)
 
@@ -104,19 +105,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildDeviceInfo(): String {
+    private fun getAICoreVersion(): String {
+        return try {
+            val info: PackageInfo = packageManager.getPackageInfo(
+                "com.google.android.aicore",
+                0
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionName ?: "Unknown"
+            } else {
+                @Suppress("DEPRECATION")
+                info.versionName ?: "Unknown"
+            }
+
+        } catch (_: Exception) {
+            "Not installed / not accessible"
+        }
+    }
+
+    private fun isAICoreInstalled(): Boolean {
+        return try {
+            packageManager.getPackageInfo(
+                "com.google.android.aicore",
+                0
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun buildDeviceReport(): String {
 
         return """
             DEVICE
             ====================
 
-            Manufacturer: ${Build.MANUFACTURER}
-            Model: ${Build.MODEL}
-            Device: ${Build.DEVICE}
-            Product: ${Build.PRODUCT}
+            Manufacturer:
+            ${Build.MANUFACTURER}
 
-            Android: ${Build.VERSION.RELEASE}
-            API: ${Build.VERSION.SDK_INT}
+            Model:
+            ${Build.MODEL}
+
+            Device:
+            ${Build.DEVICE}
+
+            Product:
+            ${Build.PRODUCT}
+
+            Android:
+            ${Build.VERSION.RELEASE}
+
+            API:
+            ${Build.VERSION.SDK_INT}
 
             Build:
             ${Build.DISPLAY}
@@ -126,6 +168,12 @@ class MainActivity : AppCompatActivity() {
 
             CPU ABI:
             ${Build.SUPPORTED_ABIS.joinToString()}
+
+            AICore:
+            ${if (isAICoreInstalled()) "INSTALLED ✅" else "NOT DETECTED ❌"}
+
+            AICore version:
+            ${getAICoreVersion()}
         """.trimIndent()
     }
 
@@ -144,110 +192,85 @@ class MainActivity : AppCompatActivity() {
                 val elapsed =
                     SystemClock.elapsedRealtime() - start
 
-                val report = when (status) {
+                val report = StringBuilder()
+
+                report.appendLine("GEMINI NANO / AICORE")
+                report.appendLine("====================")
+                report.appendLine()
+
+                when (status) {
 
                     FeatureStatus.AVAILABLE -> {
 
-                        val modelName = try {
-                            generativeModel.getBaseModelName()
+                        report.appendLine("STATUS: AVAILABLE ✅")
+                        report.appendLine()
+                        report.appendLine(
+                            "The requested GenAI Prompt API is available."
+                        )
+                        report.appendLine()
+
+                        try {
+                            report.appendLine("BASE MODEL:")
+                            report.appendLine(
+                                generativeModel.getBaseModelName()
+                            )
                         } catch (_: Exception) {
-                            "Unknown"
+                            report.appendLine("BASE MODEL: Unknown")
                         }
-
-                        """
-                        AI AVAILABILITY
-                        ====================
-
-                        STATUS: AVAILABLE ✅
-
-                        Local GenAI inference should
-                        be available for this API.
-
-                        BASE MODEL:
-                        $modelName
-
-                        STATUS CHECK:
-                        ${elapsed} ms
-
-                        $deviceReport()
-                        """.trimIndent()
                     }
 
                     FeatureStatus.DOWNLOADABLE -> {
 
-                        """
-                        AI AVAILABILITY
-                        ====================
-
-                        STATUS: DOWNLOADABLE 🟡
-
-                        The feature is supported but
-                        required model data is not ready.
-
-                        STATUS CHECK:
-                        ${elapsed} ms
-
-                        $deviceReport()
-                        """.trimIndent()
+                        report.appendLine("STATUS: DOWNLOADABLE 🟡")
+                        report.appendLine()
+                        report.appendLine(
+                            "The feature is supported, but model data "
+                        )
+                        report.appendLine(
+                            "has not been downloaded yet."
+                        )
                     }
 
                     FeatureStatus.DOWNLOADING -> {
 
-                        """
-                        AI AVAILABILITY
-                        ====================
-
-                        STATUS: DOWNLOADING 🟡
-
-                        Model resources are currently
-                        being prepared.
-
-                        Try again after the download finishes.
-
-                        $deviceReport()
-                        """.trimIndent()
+                        report.appendLine("STATUS: DOWNLOADING 🟡")
+                        report.appendLine()
+                        report.appendLine(
+                            "AICore is currently downloading model resources."
+                        )
                     }
 
                     FeatureStatus.UNAVAILABLE -> {
 
-                        """
-                        AI AVAILABILITY
-                        ====================
-
-                        STATUS: UNAVAILABLE ❌
-
-                        This ML Kit GenAI feature is not
-                        currently available on this device
-                        configuration.
-
-                        STATUS CHECK:
-                        ${elapsed} ms
-
-                        $deviceReport()
-                        """.trimIndent()
+                        report.appendLine("STATUS: UNAVAILABLE ❌")
+                        report.appendLine()
+                        report.appendLine(
+                            "The requested GenAI feature is not "
+                        )
+                        report.appendLine(
+                            "currently available on this configuration."
+                        )
                     }
 
                     else -> {
 
-                        """
-                        AI AVAILABILITY
-                        ====================
-
-                        STATUS: UNKNOWN ⚠️
-
-                        Returned status:
-                        $status
-
-                        STATUS CHECK:
-                        ${elapsed} ms
-
-                        $deviceReport()
-                        """.trimIndent()
+                        report.appendLine("STATUS: UNKNOWN ⚠️")
+                        report.appendLine()
+                        report.appendLine(
+                            "Returned status: $status"
+                        )
                     }
                 }
 
-                lastReport = report
-                resultText.text = report
+                report.appendLine()
+                report.appendLine("STATUS CHECK TIME:")
+                report.appendLine("$elapsed ms")
+
+                report.appendLine()
+                report.appendLine(buildDeviceReport())
+
+                lastReport = report.toString()
+                resultText.text = lastReport
 
             } catch (e: Exception) {
 
@@ -267,9 +290,9 @@ class MainActivity : AppCompatActivity() {
                     ${e.message ?: "No message"}
 
                     Check time:
-                    ${elapsed} ms
+                    $elapsed ms
 
-                    $deviceReport()
+                    $buildDeviceReport()
                 """.trimIndent()
 
                 lastReport = report
@@ -296,18 +319,16 @@ class MainActivity : AppCompatActivity() {
 
                         BENCHMARK NOT RUN ❌
 
-                        Reason:
                         Gemini Nano is not currently
-                        available for the Prompt API.
+                        available through the Prompt API.
 
                         Status:
                         $status
 
-                        This device cannot receive a
-                        meaningful Nano performance score
-                        until the API becomes available.
+                        No performance score was generated.
+                        This avoids producing a misleading score.
 
-                        $deviceReport()
+                        ${buildDeviceReport()}
                     """.trimIndent()
 
                     lastReport = report
@@ -323,34 +344,25 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val prompts = listOf(
-
-                    "Reply with exactly: BENCHMARK TEST ONE",
-
+                    "Reply with exactly: TEST ONE",
                     "Explain in three short sentences why the sky is blue.",
-
-                    "Rewrite this sentence to sound more professional: " +
-                            "\"I can't come tomorrow because I have some work to do.\"",
-
-                    "Summarize this in one sentence: " +
-                            "Artificial intelligence can run directly on a phone, " +
-                            "allowing some tasks to work without sending data to a cloud server.",
-
-                    "Give three concise benefits of running an AI model locally on a smartphone."
+                    "Rewrite this sentence professionally: I cannot attend tomorrow because I have work.",
+                    "Summarize this in one sentence: On-device AI can perform certain tasks locally without sending the request to a cloud server.",
+                    "Give three concise benefits of running an AI model locally."
                 )
 
-                val results = mutableListOf<BenchmarkResult>()
+                val results = mutableListOf<RunResult>()
 
                 /*
-                 * Warm-up run.
-                 *
-                 * We don't include this in the final average because
-                 * first-use initialization can be substantially slower.
+                 * Warm-up.
+                 * This is intentionally excluded from the main average.
                  */
-                val warmupStart = SystemClock.elapsedRealtime()
+                val warmupStart =
+                    SystemClock.elapsedRealtime()
 
                 try {
                     generativeModel.generateContent(
-                        "Warm up the local model. Reply with one word: READY"
+                        "Warm up. Reply with READY."
                     )
                 } catch (_: Exception) {
                 }
@@ -359,50 +371,56 @@ class MainActivity : AppCompatActivity() {
                     SystemClock.elapsedRealtime() - warmupStart
 
                 /*
-                 * Measured runs.
+                 * Timed benchmark runs.
                  */
-                for ((index, prompt) in prompts.withIndex()) {
+                for (index in prompts.indices) {
 
-                    val beforeCpu =
-                        Debug.threadCpuTimeNanos()
+                    val prompt = prompts[index]
 
-                    val start =
+                    val wallStart =
                         SystemClock.elapsedRealtime()
+
+                    val cpuStart =
+                        Debug.threadCpuTimeNanos()
 
                     try {
 
                         generativeModel.generateContent(prompt)
 
-                        val elapsed =
-                            SystemClock.elapsedRealtime() - start
+                        val wallTime =
+                            SystemClock.elapsedRealtime() - wallStart
 
-                        val cpuAfter =
-                            Debug.threadCpuTimeNanos()
+                        val cpuTime =
+                            (
+                                Debug.threadCpuTimeNanos() -
+                                    cpuStart
+                                ) / 1_000_000.0
 
                         results.add(
-                            BenchmarkResult(
-                                index = index + 1,
-                                elapsedMs = elapsed,
-                                cpuMs =
-                                    (cpuAfter - beforeCpu) / 1_000_000.0,
+                            RunResult(
+                                number = index + 1,
+                                wallTimeMs = wallTime,
+                                cpuTimeMs = cpuTime,
                                 success = true
                             )
                         )
 
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
 
-                        val elapsed =
-                            SystemClock.elapsedRealtime() - start
+                        val wallTime =
+                            SystemClock.elapsedRealtime() - wallStart
 
-                        val cpuAfter =
-                            Debug.threadCpuTimeNanos()
+                        val cpuTime =
+                            (
+                                Debug.threadCpuTimeNanos() -
+                                    cpuStart
+                                ) / 1_000_000.0
 
                         results.add(
-                            BenchmarkResult(
-                                index = index + 1,
-                                elapsedMs = elapsed,
-                                cpuMs =
-                                    (cpuAfter - beforeCpu) / 1_000_000.0,
+                            RunResult(
+                                number = index + 1,
+                                wallTimeMs = wallTime,
+                                cpuTimeMs = cpuTime,
                                 success = false
                             )
                         )
@@ -414,124 +432,152 @@ class MainActivity : AppCompatActivity() {
 
                 val average =
                     if (successful.isNotEmpty()) {
-                        successful.map { it.elapsedMs }.average()
+                        successful
+                            .map { it.wallTimeMs }
+                            .average()
                     } else {
                         0.0
                     }
 
                 val fastest =
-                    successful.minOfOrNull { it.elapsedMs }
-                        ?: 0L
+                    successful.minOfOrNull {
+                        it.wallTimeMs
+                    } ?: 0L
 
                 val slowest =
-                    successful.maxOfOrNull { it.elapsedMs }
-                        ?: 0L
+                    successful.maxOfOrNull {
+                        it.wallTimeMs
+                    } ?: 0L
 
                 val successRate =
                     if (results.isNotEmpty()) {
-                        (successful.size * 100.0) / results.size
+                        successful.size * 100.0 /
+                            results.size
                     } else {
                         0.0
                     }
 
-                val battery = getBatterySnapshot()
+                val report = StringBuilder()
 
-                val report = buildString {
+                report.appendLine("GEMINI NANO BENCHMARK")
+                report.appendLine("====================")
+                report.appendLine()
 
-                    appendLine("GEMINI NANO BENCHMARK")
-                    appendLine("====================")
-                    appendLine()
+                report.appendLine("MODEL:")
+                report.appendLine(modelName)
+                report.appendLine()
 
-                    appendLine("MODEL")
-                    appendLine("--------------------")
-                    appendLine(modelName)
-                    appendLine()
+                report.appendLine("WARM-UP:")
+                report.appendLine("$warmupTime ms")
+                report.appendLine("(excluded from average)")
+                report.appendLine()
 
-                    appendLine("WARM-UP")
-                    appendLine("--------------------")
-                    appendLine("$warmupTime ms")
-                    appendLine("(excluded from average)")
-                    appendLine()
+                report.appendLine("INDIVIDUAL RUNS:")
+                report.appendLine("--------------------")
 
-                    appendLine("TEST RESULTS")
-                    appendLine("--------------------")
+                for (run in results) {
 
-                    for (r in results) {
+                    if (run.success) {
 
-                        appendLine(
-                            "Test ${r.index}: " +
-                                    if (r.success) {
-                                        "${r.elapsedMs} ms ✅"
-                                    } else {
-                                        "FAILED ❌"
-                                    }
+                        report.appendLine(
+                            "Run ${run.number}: " +
+                                "${run.wallTimeMs} ms ✅"
+                        )
+
+                    } else {
+
+                        report.appendLine(
+                            "Run ${run.number}: FAILED ❌"
                         )
                     }
-
-                    appendLine()
-
-                    appendLine("SUMMARY")
-                    appendLine("--------------------")
-                    appendLine(
-                        "Successful: ${successful.size}/${results.size}"
-                    )
-                    appendLine(
-                        "Success rate: ${successRate.roundToInt()}%"
-                    )
-
-                    if (successful.isNotEmpty()) {
-                        appendLine(
-                            "Fastest: $fastest ms"
-                        )
-
-                        appendLine(
-                            "Slowest: $slowest ms"
-                        )
-
-                        appendLine(
-                            "Average: ${formatDouble(average)} ms"
-                        )
-                    }
-
-                    appendLine()
-
-                    appendLine("CPU TIME")
-                    appendLine("--------------------")
-
-                    successful.forEach { r ->
-                        appendLine(
-                            "Test ${r.index}: " +
-                                    formatDouble(r.cpuMs) +
-                                    " ms"
-                        )
-                    }
-
-                    appendLine()
-
-                    appendLine("BATTERY")
-                    appendLine("--------------------")
-                    appendLine(battery)
-
-                    appendLine()
-
-                    appendLine("IMPORTANT")
-                    appendLine("--------------------")
-                    appendLine(
-                        "Generation throughput in tokens/sec " +
-                                "is NOT reported because the ML Kit " +
-                                "Prompt API used here does not expose " +
-                                "a reliable generated-token count."
-                    )
-
-                    appendLine()
-
-                    appendLine("DEVICE")
-                    appendLine("--------------------")
-                    appendLine(buildDeviceInfo())
                 }
 
-                lastReport = report
-                resultText.text = report
+                report.appendLine()
+
+                report.appendLine("SUMMARY:")
+                report.appendLine("--------------------")
+
+                report.appendLine(
+                    "Success: ${successful.size}/${results.size}"
+                )
+
+                report.appendLine(
+                    "Success rate: " +
+                        String.format(
+                            Locale.US,
+                            "%.1f",
+                            successRate
+                        ) +
+                        "%"
+                )
+
+                if (successful.isNotEmpty()) {
+
+                    report.appendLine(
+                        "Fastest: $fastest ms"
+                    )
+
+                    report.appendLine(
+                        "Slowest: $slowest ms"
+                    )
+
+                    report.appendLine(
+                        "Average: " +
+                            String.format(
+                                Locale.US,
+                                "%.2f",
+                                average
+                            ) +
+                            " ms"
+                    )
+                }
+
+                report.appendLine()
+
+                report.appendLine("THREAD CPU TIME:")
+                report.appendLine("--------------------")
+
+                for (run in successful) {
+
+                    report.appendLine(
+                        "Run ${run.number}: " +
+                            String.format(
+                                Locale.US,
+                                "%.2f",
+                                run.cpuTimeMs
+                            ) +
+                            " ms"
+                    )
+                }
+
+                report.appendLine()
+
+                report.appendLine("BATTERY:")
+                report.appendLine("--------------------")
+                report.appendLine(
+                    getBatteryPercent()
+                )
+
+                report.appendLine()
+
+                report.appendLine("TOKEN THROUGHPUT:")
+                report.appendLine("--------------------")
+                report.appendLine(
+                    "Not measured."
+                )
+                report.appendLine(
+                    "This API version does not provide a reliable"
+                )
+                report.appendLine(
+                    "generated-token count for calculating tokens/sec."
+                )
+
+                report.appendLine()
+
+                report.appendLine(buildDeviceReport())
+
+                lastReport = report.toString()
+                resultText.text = lastReport
 
             } catch (e: Exception) {
 
@@ -547,7 +593,7 @@ class MainActivity : AppCompatActivity() {
                     Message:
                     ${e.message ?: "No message"}
 
-                    $deviceReport()
+                    ${buildDeviceReport()}
                 """.trimIndent()
 
                 lastReport = report
@@ -556,54 +602,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun getBatterySnapshot(): String {
+    private fun getBatteryPercent(): String {
 
-        val manager =
-            getSystemService(BATTERY_SERVICE)
+        return try {
+
+            val manager =
+                getSystemService(BATTERY_SERVICE)
                     as BatteryManager
 
-        val percent =
-            manager.getIntProperty(
-                BatteryManager.BATTERY_PROPERTY_CAPACITY
-            )
+            val percent =
+                manager.getIntProperty(
+                    BatteryManager.BATTERY_PROPERTY_CAPACITY
+                )
 
-        return "Battery: $percent%"
-    }
+            "$percent%"
 
-    private fun deviceReport(): String {
+        } catch (_: Exception) {
 
-        return """
-            DEVICE
-            --------------------
-            $deviceInfoShort()
-
-            AICore package:
-            ${
-                try {
-                    packageManager.getPackageInfo(
-                        "com.google.android.aicore",
-                        0
-                    )
-                    "INSTALLED ✅"
-                } catch (_: Exception) {
-                    "NOT DETECTED ❌"
-                }
-            }
-        """.trimIndent()
-    }
-
-    private fun deviceInfoShort(): String {
-
-        return """
-            ${Build.MANUFACTURER} ${Build.MODEL}
-            Android ${Build.VERSION.RELEASE}
-            API ${Build.VERSION.SDK_INT}
-            ABI ${Build.SUPPORTED_ABIS.joinToString()}
-        """.trimIndent()
-    }
-
-    private fun formatDouble(value: Double): String {
-        return "%.2f".format(value)
+            "Unknown"
+        }
     }
 
     private fun copyReport() {
@@ -612,12 +629,12 @@ class MainActivity : AppCompatActivity() {
             if (lastReport.isNotBlank()) {
                 lastReport
             } else {
-                "No benchmark or diagnostic report generated yet."
+                "No report has been generated yet."
             }
 
         val clipboard =
             getSystemService(Context.CLIPBOARD_SERVICE)
-                    as ClipboardManager
+                as ClipboardManager
 
         clipboard.setPrimaryClip(
             android.content.ClipData.newPlainText(
@@ -641,10 +658,10 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private data class BenchmarkResult(
-        val index: Int,
-        val elapsedMs: Long,
-        val cpuMs: Double,
+    private data class RunResult(
+        val number: Int,
+        val wallTimeMs: Long,
+        val cpuTimeMs: Double,
         val success: Boolean
     )
 }
