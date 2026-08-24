@@ -131,7 +131,7 @@ class MainActivity : AppCompatActivity() {
 
                 resultText.text =
                     "INFERENCE SUCCESS ✅\n\n" +
-                    "Response:\n${response.text}"
+                    "Response:\n$response"
 
             } catch (e: Exception) {
                 resultText.text =
