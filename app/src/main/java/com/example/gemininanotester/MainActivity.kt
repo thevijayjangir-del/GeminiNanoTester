@@ -1,13 +1,10 @@
 package com.example.gemininanotester
 
-import android.content.ClipboardManager
-import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -23,32 +20,23 @@ class MainActivity : AppCompatActivity() {
         Generation.getClient()
     }
 
-    private var lastReport = ""
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = LinearLayout(this).apply {
+        val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 32, 32, 32)
-        }
-
-        val scrollView = ScrollView(this)
-
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
         }
 
         val title = TextView(this).apply {
             text = "Gemini Nano Tester"
             textSize = 28f
-            setPadding(0, 0, 0, 24)
+            setPadding(0, 0, 0, 30)
         }
 
-        val device = TextView(this).apply {
+        val deviceInfo = TextView(this).apply {
             text = buildDeviceInfo()
             textSize = 16f
-            setPadding(0, 0, 0, 24)
         }
 
         val checkButton = Button(this).apply {
@@ -63,30 +51,20 @@ class MainActivity : AppCompatActivity() {
             text = "COPY DIAGNOSTIC REPORT"
         }
 
-        val resultTitle = TextView(this).apply {
-            text = "RESULT"
-            textSize = 20f
-            setPadding(0, 24, 0, 8)
-        }
-
         resultText = TextView(this).apply {
-            text = "Press CHECK NANO / AICORE to begin."
+            text = "Press a button to begin."
             textSize = 17f
-            setPadding(0, 8, 0, 32)
+            setPadding(0, 30, 0, 0)
         }
 
-        content.addView(title)
-        content.addView(device)
-        content.addView(checkButton)
-        content.addView(testButton)
-        content.addView(copyButton)
-        content.addView(resultTitle)
-        content.addView(resultText)
+        layout.addView(title)
+        layout.addView(deviceInfo)
+        layout.addView(checkButton)
+        layout.addView(testButton)
+        layout.addView(copyButton)
+        layout.addView(resultText)
 
-        scrollView.addView(content)
-        root.addView(scrollView)
-
-        setContentView(root)
+        setContentView(layout)
 
         checkButton.setOnClickListener {
             checkNano()
@@ -103,15 +81,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildDeviceInfo(): String {
 
-        val aicoreInstalled = try {
-            packageManager.getPackageInfo(
-                "com.google.android.aicore",
-                0
-            )
-            true
-        } catch (_: Exception) {
-            false
-        }
+        val aicoreVersion = getAICoreVersion()
 
         return """
             DEVICE
@@ -125,257 +95,269 @@ class MainActivity : AppCompatActivity() {
             API: ${Build.VERSION.SDK_INT}
 
             Build: ${Build.DISPLAY}
-            Security patch: ${Build.VERSION.SECURITY_PATCH}
+            Security patch: ${
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    Build.VERSION.SECURITY_PATCH
+                else
+                    "Unknown"
+            }
 
             AICore package: ${
-                if (aicoreInstalled) "INSTALLED ✅" else "NOT DETECTED ❌"
+                if (aicoreVersion != null) "INSTALLED ✅" else "NOT FOUND ❌"
             }
+
+            AICore version: ${aicoreVersion ?: "Unknown"}
         """.trimIndent()
+    }
+
+    private fun getAICoreVersion(): String? {
+
+        return try {
+            val packageInfo = packageManager.getPackageInfo(
+                "com.google.android.aicore",
+                0
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionName
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionName
+            }
+
+        } catch (e: PackageManager.NameNotFoundException) {
+            null
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun checkNano() {
 
-        resultText.text = "Checking AICore / Gemini Nano..."
+        resultText.text = "Checking Gemini Nano / AICore..."
 
         lifecycleScope.launch {
 
-            val startTime = SystemClock.elapsedRealtime()
+            val startTime = System.currentTimeMillis()
 
             try {
 
                 val status = generativeModel.checkStatus()
 
-                val elapsed =
-                    SystemClock.elapsedRealtime() - startTime
+                val elapsed = System.currentTimeMillis() - startTime
 
-                val statusDescription = when (status) {
+                val report = StringBuilder()
 
-                    FeatureStatus.AVAILABLE ->
-                        """
-                        AVAILABLE ✅
+                report.appendLine("GEMINI NANO DIAGNOSTIC")
+                report.appendLine("======================")
+                report.appendLine()
 
-                        Gemini Nano is available for this Prompt API configuration.
+                when (status) {
 
-                        You can attempt local inference.
-                        """.trimIndent()
+                    FeatureStatus.AVAILABLE -> {
 
-                    FeatureStatus.DOWNLOADABLE ->
-                        """
-                        DOWNLOADABLE 🟡
+                        report.appendLine("RESULT: AVAILABLE ✅")
+                        report.appendLine()
+                        report.appendLine("Gemini Nano is currently available")
+                        report.appendLine("through the requested ML Kit")
+                        report.appendLine("GenAI Prompt API.")
+                        report.appendLine()
 
-                        Gemini Nano is supported for this configuration,
-                        but the required model is not currently downloaded.
+                        try {
+                            report.appendLine("BASE MODEL")
+                            report.appendLine("----------------------")
+                            report.appendLine(
+                                generativeModel.getBaseModelName()
+                            )
+                        } catch (e: Exception) {
+                            report.appendLine("BASE MODEL")
+                            report.appendLine("----------------------")
+                            report.appendLine("Could not retrieve model name.")
+                        }
+                    }
 
-                        A download may be required before inference.
-                        """.trimIndent()
+                    FeatureStatus.DOWNLOADABLE -> {
 
-                    FeatureStatus.DOWNLOADING ->
-                        """
-                        DOWNLOADING 🟡
+                        report.appendLine("RESULT: DOWNLOADABLE 🟡")
+                        report.appendLine()
+                        report.appendLine(
+                            "The requested Gemini Nano feature is supported"
+                        )
+                        report.appendLine(
+                            "but the required model is not downloaded yet."
+                        )
+                    }
 
-                        Gemini Nano is currently being downloaded.
-                        Try again after the download completes.
-                        """.trimIndent()
+                    FeatureStatus.DOWNLOADING -> {
 
-                    FeatureStatus.UNAVAILABLE ->
-                        """
-                        UNAVAILABLE ❌
+                        report.appendLine("RESULT: DOWNLOADING 🟡")
+                        report.appendLine()
+                        report.appendLine(
+                            "Gemini Nano is currently being downloaded."
+                        )
+                    }
 
-                        Gemini Nano is not currently available for
-                        this Prompt API configuration on this device.
-                        """.trimIndent()
+                    FeatureStatus.UNAVAILABLE -> {
 
-                    else ->
-                        """
-                        UNKNOWN ⚠️
+                        report.appendLine("RESULT: UNAVAILABLE ❌")
+                        report.appendLine()
+                        report.appendLine(
+                            "The requested Gemini Nano feature is not"
+                        )
+                        report.appendLine(
+                            "currently available on this device."
+                        )
+                        report.appendLine()
+                        report.appendLine("IMPORTANT")
+                        report.appendLine("----------------------")
+                        report.appendLine(
+                            "This does NOT necessarily mean AICore is missing."
+                        )
+                        report.appendLine(
+                            "It means this specific GenAI feature is unavailable."
+                        )
+                    }
 
-                        Returned status:
-                        $status
-                        """.trimIndent()
-                }
+                    else -> {
 
-                var modelName = ""
-
-                if (status == FeatureStatus.AVAILABLE) {
-
-                    modelName = try {
-                        "\n\nBase model:\n${generativeModel.getBaseModelName()}"
-                    } catch (e: Exception) {
-                        "\n\nBase model:\nUnable to retrieve\n${e.message}"
+                        report.appendLine("RESULT: UNKNOWN ⚠️")
+                        report.appendLine()
+                        report.appendLine("Status: $status")
                     }
                 }
 
-                val report = """
-                    GEMINI NANO DIAGNOSTIC
-                    =====================
+                report.appendLine()
+                report.appendLine("CHECK TIME")
+                report.appendLine("----------------------")
+                report.appendLine("$elapsed ms")
 
-                    $statusDescription
+                report.appendLine()
+                report.appendLine("DEVICE")
+                report.appendLine("----------------------")
+                report.appendLine(buildDeviceInfo())
 
-                    STATUS:
-                    $status
-
-                    CHECK TIME:
-                    ${elapsed} ms
-
-                    DEVICE
-                    ---------------------
-                    ${buildDeviceInfo()}
-                    $modelName
-                """.trimIndent()
-
-                lastReport = report
-                resultText.text = report
+                resultText.text = report.toString()
 
             } catch (e: Exception) {
 
-                val elapsed =
-                    SystemClock.elapsedRealtime() - startTime
+                val elapsed = System.currentTimeMillis() - startTime
 
-                val rawError =
-                    e.message ?: "No error message"
+                val rawError = e.message ?: e.toString()
 
-                val diagnosis =
-                    diagnoseError(rawError)
-
-                val report = """
-                    GEMINI NANO DIAGNOSTIC
-                    =====================
-
-                    RESULT: CHECK FAILED ❌
-
-                    DIAGNOSIS
-                    ---------------------
-                    $diagnosis
-
-                    ERROR CLASS
-                    ---------------------
-                    ${e.javaClass.simpleName}
-
-                    RAW ERROR
-                    ---------------------
-                    $rawError
-
-                    CHECK TIME
-                    ---------------------
-                    ${elapsed} ms
-
-                    DEVICE
-                    ---------------------
-                    ${buildDeviceInfo()}
-                """.trimIndent()
-
-                lastReport = report
-                resultText.text = report
+                resultText.text = buildErrorReport(
+                    title = "CHECK FAILED ❌",
+                    error = e,
+                    rawError = rawError,
+                    elapsed = elapsed
+                )
             }
         }
     }
 
     private fun runNanoTest() {
 
-        resultText.text =
-            "Running local Gemini Nano inference..."
+        resultText.text = "Running real Gemini Nano inference..."
 
         lifecycleScope.launch {
 
-            val startTime = SystemClock.elapsedRealtime()
+            val startTime = System.currentTimeMillis()
 
             try {
-
-                val status = generativeModel.checkStatus()
-
-                if (status != FeatureStatus.AVAILABLE) {
-
-                    val report = """
-                        INFERENCE TEST
-                        ===============
-
-                        RESULT: NOT AVAILABLE ❌
-
-                        Gemini Nano is not currently ready
-                        for inference.
-
-                        STATUS:
-                        $status
-
-                        No inference request was sent.
-                    """.trimIndent()
-
-                    lastReport = report
-                    resultText.text = report
-
-                    return@launch
-                }
 
                 val response = generativeModel.generateContent(
                     "Reply with exactly: GEMINI NANO LOCAL TEST PASS"
                 )
 
-                val elapsed =
-                    SystemClock.elapsedRealtime() - startTime
+                val elapsed = System.currentTimeMillis() - startTime
 
-                val report = """
+                val generatedText =
+                    response.candidates
+                        .firstOrNull()
+                        ?.text
+                        ?: "No text returned."
+
+                resultText.text = """
                     INFERENCE TEST
                     ===============
 
                     RESULT: SUCCESS ✅
 
-                    LOCAL INFERENCE COMPLETED
+                    Gemini Nano successfully processed
+                    the prompt locally through the ML Kit
+                    GenAI Prompt API.
 
-                    Response object:
-                    $response
-
-                    Inference time:
-                    ${elapsed} ms
-
-                    Device:
-                    ${Build.MANUFACTURER} ${Build.MODEL}
-                """.trimIndent()
-
-                lastReport = report
-                resultText.text = report
-
-            } catch (e: Exception) {
-
-                val elapsed =
-                    SystemClock.elapsedRealtime() - startTime
-
-                val rawError =
-                    e.message ?: "No error message"
-
-                val diagnosis =
-                    diagnoseError(rawError)
-
-                val report = """
-                    INFERENCE TEST
-                    ===============
-
-                    RESULT: FAILED ❌
-
-                    DIAGNOSIS
+                    RESPONSE
                     ---------------------
-                    $diagnosis
-
-                    ERROR CLASS
-                    ---------------------
-                    ${e.javaClass.simpleName}
-
-                    RAW ERROR
-                    ---------------------
-                    $rawError
+                    $generatedText
 
                     TIME
                     ---------------------
-                    ${elapsed} ms
+                    $elapsed ms
+
+                    BASE MODEL
+                    ---------------------
+                    ${
+                        try {
+                            generativeModel.getBaseModelName()
+                        } catch (e: Exception) {
+                            "Unknown"
+                        }
+                    }
 
                     DEVICE
                     ---------------------
                     ${buildDeviceInfo()}
                 """.trimIndent()
 
-                lastReport = report
-                resultText.text = report
+            } catch (e: Exception) {
+
+                val elapsed = System.currentTimeMillis() - startTime
+
+                resultText.text = buildErrorReport(
+                    title = "INFERENCE TEST FAILED ❌",
+                    error = e,
+                    rawError = e.message ?: e.toString(),
+                    elapsed = elapsed
+                )
             }
         }
+    }
+
+    private fun buildErrorReport(
+        title: String,
+        error: Exception,
+        rawError: String,
+        elapsed: Long
+    ): String {
+
+        val diagnosis = diagnoseError(rawError)
+
+        return """
+            GEMINI NANO DIAGNOSTIC
+            ======================
+
+            RESULT: $title
+
+            DIAGNOSIS
+            ---------------------
+            $diagnosis
+
+            ERROR CLASS
+            ---------------------
+            ${error.javaClass.simpleName}
+
+            RAW ERROR
+            ---------------------
+            $rawError
+
+            TIME
+            ---------------------
+            $elapsed ms
+
+            DEVICE
+            ---------------------
+            ${buildDeviceInfo()}
+        """.trimIndent()
     }
 
     private fun diagnoseError(error: String): String {
@@ -385,104 +367,114 @@ class MainActivity : AppCompatActivity() {
         return when {
 
             lower.contains("606-feature_not_found") ||
-            lower.contains("feature_not_found") ->
+            lower.contains("feature_not_found") -> {
 
                 """
-                AICore is present, but the requested GenAI
-                feature is not currently exposed.
+                AICore is present and responding, but the
+                requested GenAI feature is currently unavailable.
 
                 Possible causes:
 
-                • Device/model is not supported for this API
-                • AICore configuration has not updated yet
+                • Device/model is not currently supported
+                • AICore configuration has not finished updating
                 • Required model configuration is unavailable
-                • Device firmware/carrier configuration differs
-                • Developer-preview feature is not enabled
+                • Firmware/carrier configuration differs
+                • Feature rollout is not enabled
+                • Device has not completed AICore initialization
 
                 Recommended:
 
-                1. Make sure the phone has internet access.
+                1. Keep the device connected to the internet.
                 2. Update AICore if an update is available.
-                3. Restart the phone.
+                3. Restart the device.
                 4. Wait and test again.
 
                 The raw AICore error is preserved below.
                 """.trimIndent()
+            }
 
-            lower.contains("binding_failure") ->
+            lower.contains("601-binding_failure") ||
+            lower.contains("binding_failure") -> {
 
                 """
-                AICore service could not be reached.
-
-                AICore may not have initialized correctly.
+                AICore is installed but the application could
+                not connect to the AICore service.
 
                 Recommended:
 
                 • Update AICore
                 • Restart the device
-                • Make sure Google system components are up to date
+                • Make sure AICore is enabled
+                • Reinstall this tester if necessary
                 """.trimIndent()
+            }
 
-            lower.contains("download_error") ||
-            lower.contains("unable to resolve host") ->
+            lower.contains("download_error") -> {
 
                 """
-                AICore could not download required resources.
+                AICore appears to have encountered a model
+                download problem.
 
-                Check the internet connection and try again.
+                Recommended:
+
+                • Check internet connectivity
+                • Keep the device connected to Wi-Fi/mobile data
+                • Update AICore
+                • Retry after a few minutes
                 """.trimIndent()
+            }
 
-            lower.contains("background_use_blocked") ->
+            lower.contains("background_use_blocked") -> {
 
                 """
-                The GenAI API was called while the application
-                was not considered the foreground application.
+                AICore rejected the request because the app
+                was not considered the active foreground app.
 
-                Run the test while this app is visible.
+                Bring this app to the foreground and retry.
                 """.trimIndent()
+            }
 
-            lower.contains("busy") ->
+            lower.contains("busy") -> {
 
                 """
                 AICore is currently busy.
 
-                Wait a moment and try again.
+                Wait a few seconds and retry the inference.
                 """.trimIndent()
+            }
 
-            else ->
+            else -> {
 
                 """
-                An unclassified GenAI/AICore error occurred.
+                The GenAI request failed.
 
-                The raw error below should be used for
-                further investigation.
+                The exact AICore error is preserved in this
+                report so the failure can be investigated.
+
+                No stronger diagnosis is being claimed because
+                the returned error does not uniquely identify
+                the cause.
                 """.trimIndent()
+            }
         }
     }
 
     private fun copyDiagnosticReport() {
 
-        if (lastReport.isBlank()) {
-            resultText.text =
-                "Run a diagnostic first, then copy the report."
-            return
-        }
-
         val clipboard =
-            getSystemService(Context.CLIPBOARD_SERVICE)
-                    as ClipboardManager
+            getSystemService(CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
 
-        val clip =
-            android.content.ClipData.newPlainText(
-                "Gemini Nano Diagnostic",
-                lastReport
-            )
+        val clip = android.content.ClipData.newPlainText(
+            "Gemini Nano Diagnostic Report",
+            resultText.text.toString()
+        )
 
         clipboard.setPrimaryClip(clip)
 
-        resultText.text =
-            lastReport +
-            "\n\n✅ Diagnostic report copied to clipboard."
+        resultText.append(
+            "\n\nDiagnostic report copied to clipboard ✅"
+        )
     }
 
     override fun onDestroy() {
