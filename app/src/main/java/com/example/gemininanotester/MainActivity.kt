@@ -2,18 +2,19 @@ package com.example.gemininanotester
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Debug
 import android.os.SystemClock
-import android.content.pm.PackageInfo
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
 import kotlinx.coroutines.launch
@@ -65,6 +66,10 @@ class MainActivity : AppCompatActivity() {
             text = "CHECK AI AVAILABILITY"
         }
 
+        val downloadButton = Button(this).apply {
+            text = "DOWNLOAD GEMINI NANO"
+        }
+
         val benchmarkButton = Button(this).apply {
             text = "RUN AI BENCHMARK"
         }
@@ -74,7 +79,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         resultText = TextView(this).apply {
-            text = "Run the availability check first."
+            text = "Check AI availability first."
             textSize = 17f
             setPadding(0, 24, 0, 32)
         }
@@ -83,6 +88,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(subtitle)
         content.addView(deviceInfo)
         content.addView(availabilityButton)
+        content.addView(downloadButton)
         content.addView(benchmarkButton)
         content.addView(copyButton)
         content.addView(resultText)
@@ -96,6 +102,10 @@ class MainActivity : AppCompatActivity() {
             checkAvailability()
         }
 
+        downloadButton.setOnClickListener {
+            downloadNano()
+        }
+
         benchmarkButton.setOnClickListener {
             runBenchmark()
         }
@@ -105,13 +115,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // AICORE INFORMATION
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun getAICoreVersion(): String {
         return try {
-
             val info: PackageInfo =
                 packageManager.getPackageInfo(
                     "com.google.android.aicore",
@@ -122,14 +131,12 @@ class MainActivity : AppCompatActivity() {
             info.versionName ?: "Unknown"
 
         } catch (_: Exception) {
-
             "Not installed / not accessible"
         }
     }
 
     private fun isAICoreInstalled(): Boolean {
         return try {
-
             packageManager.getPackageInfo(
                 "com.google.android.aicore",
                 0
@@ -138,22 +145,21 @@ class MainActivity : AppCompatActivity() {
             true
 
         } catch (_: Exception) {
-
             false
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // DEVICE REPORT
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun buildDeviceReport(): String {
 
         val aicoreStatus =
             if (isAICoreInstalled()) {
-                "INSTALLED ✅"
+                "INSTALLED"
             } else {
-                "NOT DETECTED ❌"
+                "NOT DETECTED"
             }
 
         return buildString {
@@ -207,9 +213,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // AVAILABILITY CHECK
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun checkAvailability() {
 
@@ -240,13 +246,13 @@ class MainActivity : AppCompatActivity() {
                             FeatureStatus.AVAILABLE -> {
 
                                 appendLine(
-                                    "STATUS: AVAILABLE ✅"
+                                    "STATUS: AVAILABLE"
                                 )
 
                                 appendLine()
 
                                 appendLine(
-                                    "The requested GenAI Prompt API is available."
+                                    "Gemini Nano is ready for inference."
                                 )
 
                                 appendLine()
@@ -271,37 +277,45 @@ class MainActivity : AppCompatActivity() {
                             FeatureStatus.DOWNLOADABLE -> {
 
                                 appendLine(
-                                    "STATUS: DOWNLOADABLE 🟡"
+                                    "STATUS: DOWNLOADABLE"
                                 )
 
                                 appendLine()
 
                                 appendLine(
-                                    "The feature is supported, but model data"
+                                    "Gemini Nano can be downloaded on this device."
                                 )
 
+                                appendLine()
+
                                 appendLine(
-                                    "has not been downloaded yet."
+                                    "Press DOWNLOAD GEMINI NANO."
                                 )
                             }
 
                             FeatureStatus.DOWNLOADING -> {
 
                                 appendLine(
-                                    "STATUS: DOWNLOADING 🟡"
+                                    "STATUS: DOWNLOADING"
                                 )
 
                                 appendLine()
 
                                 appendLine(
-                                    "AICore is currently downloading model resources."
+                                    "Gemini Nano is currently being downloaded."
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "Wait for the download to finish."
                                 )
                             }
 
                             FeatureStatus.UNAVAILABLE -> {
 
                                 appendLine(
-                                    "STATUS: UNAVAILABLE ❌"
+                                    "STATUS: UNAVAILABLE"
                                 )
 
                                 appendLine()
@@ -318,7 +332,7 @@ class MainActivity : AppCompatActivity() {
                             else -> {
 
                                 appendLine(
-                                    "STATUS: UNKNOWN ⚠️"
+                                    "STATUS: UNKNOWN"
                                 )
 
                                 appendLine()
@@ -356,7 +370,7 @@ class MainActivity : AppCompatActivity() {
                         appendLine("====================")
                         appendLine()
 
-                        appendLine("STATUS: ERROR ❌")
+                        appendLine("STATUS: ERROR")
                         appendLine()
 
                         appendLine("Exception:")
@@ -389,9 +403,586 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
+    // GEMINI NANO DOWNLOAD
+    // =========================================================
+
+    private fun downloadNano() {
+
+        resultText.text =
+            "Checking whether Gemini Nano can be downloaded..."
+
+        lifecycleScope.launch {
+
+            try {
+
+                val status =
+                    generativeModel.checkStatus()
+
+                when (status) {
+
+                    FeatureStatus.AVAILABLE -> {
+
+                        val report =
+                            buildString {
+
+                                appendLine(
+                                    "GEMINI NANO DOWNLOAD"
+                                )
+
+                                appendLine(
+                                    "===================="
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "STATUS: ALREADY AVAILABLE"
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "Gemini Nano is already downloaded"
+                                )
+
+                                appendLine(
+                                    "and ready for inference."
+                                )
+
+                                appendLine()
+
+                                try {
+
+                                    appendLine("BASE MODEL:")
+                                    appendLine(
+                                        generativeModel
+                                            .getBaseModelName()
+                                    )
+
+                                } catch (_: Exception) {
+
+                                    appendLine(
+                                        "BASE MODEL: Unknown"
+                                    )
+                                }
+
+                                appendLine()
+
+                                appendLine(
+                                    buildDeviceReport()
+                                )
+                            }
+
+                        lastReport = report
+                        resultText.text = report
+                    }
+
+                    FeatureStatus.DOWNLOADABLE -> {
+
+                        resultText.text =
+                            buildString {
+
+                                appendLine(
+                                    "GEMINI NANO DOWNLOAD"
+                                )
+
+                                appendLine(
+                                    "===================="
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "Starting download..."
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "Keep the phone connected to the internet."
+                                )
+
+                                appendLine(
+                                    "Do not close the app while downloading."
+                                )
+                            }
+
+                        var finalMessage =
+                            "Download finished."
+
+                        generativeModel
+                            .download()
+                            .collect { downloadStatus ->
+
+                                when (downloadStatus) {
+
+                                    is DownloadStatus.DownloadStarted -> {
+
+                                        resultText.text =
+                                            buildString {
+
+                                                appendLine(
+                                                    "GEMINI NANO DOWNLOAD"
+                                                )
+
+                                                appendLine(
+                                                    "===================="
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "DOWNLOAD STARTED"
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "AICore is preparing Gemini Nano."
+                                                )
+                                            }
+                                    }
+
+                                    is DownloadStatus.DownloadProgress -> {
+
+                                        val bytes =
+                                            downloadStatus
+                                                .totalBytesDownloaded
+
+                                        resultText.text =
+                                            buildString {
+
+                                                appendLine(
+                                                    "GEMINI NANO DOWNLOAD"
+                                                )
+
+                                                appendLine(
+                                                    "===================="
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "DOWNLOADING..."
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "Downloaded:"
+                                                )
+
+                                                appendLine(
+                                                    formatBytes(bytes)
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "AICore is downloading the"
+                                                )
+
+                                                appendLine(
+                                                    "required Gemini Nano model."
+                                                )
+                                            }
+                                    }
+
+                                    DownloadStatus.DownloadCompleted -> {
+
+                                        finalMessage =
+                                            buildString {
+
+                                                appendLine(
+                                                    "GEMINI NANO DOWNLOAD"
+                                                )
+
+                                                appendLine(
+                                                    "===================="
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "DOWNLOAD COMPLETE"
+                                                )
+
+                                                appendLine()
+                                                appendLine(
+                                                    "Gemini Nano model assets"
+                                                )
+
+                                                appendLine(
+                                                    "have been downloaded."
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "Checking availability..."
+                                                )
+                                            }
+
+                                        resultText.text =
+                                            finalMessage
+                                    }
+
+                                    is DownloadStatus.DownloadFailed -> {
+
+                                        finalMessage =
+                                            buildString {
+
+                                                appendLine(
+                                                    "GEMINI NANO DOWNLOAD"
+                                                )
+
+                                                appendLine(
+                                                    "===================="
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "DOWNLOAD FAILED"
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "The model could not be downloaded."
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "Error:"
+                                                )
+
+                                                appendLine(
+                                                    downloadStatus.toString()
+                                                )
+
+                                                appendLine()
+
+                                                appendLine(
+                                                    "Check your internet connection,"
+                                                )
+
+                                                appendLine(
+                                                    "AICore updates and device status."
+                                                )
+                                            }
+
+                                        resultText.text =
+                                            finalMessage
+                                    }
+                                }
+                            }
+
+                        val finalStatus =
+                            try {
+                                generativeModel.checkStatus()
+                            } catch (_: Exception) {
+                                null
+                            }
+
+                        val report =
+                            buildString {
+
+                                appendLine(finalMessage)
+
+                                appendLine()
+
+                                if (finalStatus ==
+                                    FeatureStatus.AVAILABLE
+                                ) {
+
+                                    appendLine(
+                                        "FINAL STATUS: AVAILABLE"
+                                    )
+
+                                    appendLine()
+
+                                    try {
+
+                                        appendLine(
+                                            "BASE MODEL:"
+                                        )
+
+                                        appendLine(
+                                            generativeModel
+                                                .getBaseModelName()
+                                        )
+
+                                    } catch (_: Exception) {
+
+                                        appendLine(
+                                            "BASE MODEL: Unknown"
+                                        )
+                                    }
+
+                                } else {
+
+                                    appendLine(
+                                        "FINAL STATUS:"
+                                    )
+
+                                    appendLine(
+                                        finalStatus?.toString()
+                                            ?: "UNKNOWN"
+                                    )
+                                }
+
+                                appendLine()
+
+                                appendLine(
+                                    buildDeviceReport()
+                                )
+                            }
+
+                        lastReport = report
+                        resultText.text = report
+                    }
+
+                    FeatureStatus.DOWNLOADING -> {
+
+                        val report =
+                            buildString {
+
+                                appendLine(
+                                    "GEMINI NANO DOWNLOAD"
+                                )
+
+                                appendLine(
+                                    "===================="
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "STATUS: ALREADY DOWNLOADING"
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "AICore is already downloading"
+                                )
+
+                                appendLine(
+                                    "Gemini Nano."
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "Wait for it to finish and"
+                                )
+
+                                appendLine(
+                                    "check availability again."
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    buildDeviceReport()
+                                )
+                            }
+
+                        lastReport = report
+                        resultText.text = report
+                    }
+
+                    FeatureStatus.UNAVAILABLE -> {
+
+                        val report =
+                            buildString {
+
+                                appendLine(
+                                    "GEMINI NANO DOWNLOAD"
+                                )
+
+                                appendLine(
+                                    "===================="
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "DOWNLOAD NOT AVAILABLE"
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "AICore currently reports that"
+                                )
+
+                                appendLine(
+                                    "this GenAI feature is unavailable."
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "This is not a download failure."
+                                )
+
+                                appendLine(
+                                    "The device configuration has not"
+                                )
+
+                                appendLine(
+                                    "made the feature downloadable."
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    buildDeviceReport()
+                                )
+                            }
+
+                        lastReport = report
+                        resultText.text = report
+                    }
+
+                    else -> {
+
+                        val report =
+                            buildString {
+
+                                appendLine(
+                                    "GEMINI NANO DOWNLOAD"
+                                )
+
+                                appendLine(
+                                    "===================="
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    "UNKNOWN STATUS"
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    status.toString()
+                                )
+
+                                appendLine()
+
+                                appendLine(
+                                    buildDeviceReport()
+                                )
+                            }
+
+                        lastReport = report
+                        resultText.text = report
+                    }
+                }
+
+            } catch (e: Exception) {
+
+                val report =
+                    buildString {
+
+                        appendLine(
+                            "GEMINI NANO DOWNLOAD"
+                        )
+
+                        appendLine(
+                            "===================="
+                        )
+
+                        appendLine()
+
+                        appendLine(
+                            "DOWNLOAD ERROR"
+                        )
+
+                        appendLine()
+
+                        appendLine(
+                            "Exception:"
+                        )
+
+                        appendLine(
+                            e.javaClass.simpleName
+                        )
+
+                        appendLine()
+
+                        appendLine(
+                            "Message:"
+                        )
+
+                        appendLine(
+                            e.message ?: "No message"
+                        )
+
+                        appendLine()
+
+                        appendLine(
+                            buildDeviceReport()
+                        )
+                    }
+
+                lastReport = report
+                resultText.text = report
+            }
+        }
+    }
+
+    // =========================================================
+    // FORMAT BYTES
+    // =========================================================
+
+    private fun formatBytes(bytes: Long): String {
+
+        if (bytes < 1024) {
+            return "$bytes B"
+        }
+
+        val kb =
+            bytes / 1024.0
+
+        if (kb < 1024) {
+            return String.format(
+                Locale.US,
+                "%.2f KB",
+                kb
+            )
+        }
+
+        val mb =
+            kb / 1024.0
+
+        if (mb < 1024) {
+            return String.format(
+                Locale.US,
+                "%.2f MB",
+                mb
+            )
+        }
+
+        val gb =
+            mb / 1024.0
+
+        return String.format(
+            Locale.US,
+            "%.2f GB",
+            gb
+        )
+    }
+
+    // =========================================================
     // AI BENCHMARK
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun runBenchmark() {
 
@@ -421,7 +1012,7 @@ class MainActivity : AppCompatActivity() {
                             appendLine()
 
                             appendLine(
-                                "BENCHMARK NOT RUN ❌"
+                                "BENCHMARK NOT RUN"
                             )
 
                             appendLine()
@@ -437,7 +1028,7 @@ class MainActivity : AppCompatActivity() {
                             appendLine()
 
                             appendLine(
-                                "Status:"
+                                "Current status:"
                             )
 
                             appendLine(
@@ -446,13 +1037,25 @@ class MainActivity : AppCompatActivity() {
 
                             appendLine()
 
-                            appendLine(
-                                "No performance score was generated."
-                            )
+                            if (
+                                status ==
+                                FeatureStatus.DOWNLOADABLE
+                            ) {
 
-                            appendLine(
-                                "This avoids producing a misleading score."
-                            )
+                                appendLine(
+                                    "Press DOWNLOAD GEMINI NANO"
+                                )
+
+                                appendLine(
+                                    "before running the benchmark."
+                                )
+
+                            } else {
+
+                                appendLine(
+                                    "No performance score was generated."
+                                )
+                            }
 
                             appendLine()
 
@@ -665,13 +1268,13 @@ class MainActivity : AppCompatActivity() {
 
                                 appendLine(
                                     "Run ${run.number}: " +
-                                        "${run.wallTimeMs} ms ✅"
+                                        "${run.wallTimeMs} ms"
                                 )
 
                             } else {
 
                                 appendLine(
-                                    "Run ${run.number}: FAILED ❌"
+                                    "Run ${run.number}: FAILED"
                                 )
                             }
                         }
@@ -754,11 +1357,11 @@ class MainActivity : AppCompatActivity() {
                         )
 
                         appendLine(
-                            "This API version does not provide a reliable"
+                            "This benchmark does not estimate"
                         )
 
                         appendLine(
-                            "generated-token count for calculating tokens/sec."
+                            "tokens/sec from generated text."
                         )
 
                         appendLine()
@@ -787,7 +1390,7 @@ class MainActivity : AppCompatActivity() {
                         appendLine()
 
                         appendLine(
-                            "BENCHMARK FAILED ❌"
+                            "BENCHMARK FAILED"
                         )
 
                         appendLine()
@@ -817,9 +1420,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // BATTERY
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun getBatteryPercent(): String {
 
@@ -843,9 +1446,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // COPY REPORT
-    // ---------------------------------------------------------
+    // =========================================================
 
     private fun copyReport() {
 
@@ -872,13 +1475,13 @@ class MainActivity : AppCompatActivity() {
         )
 
         resultText.append(
-            "\n\n✅ Report copied to clipboard."
+            "\n\nReport copied to clipboard."
         )
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // CLEANUP
-    // ---------------------------------------------------------
+    // =========================================================
 
     override fun onDestroy() {
 
@@ -892,9 +1495,9 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    // ---------------------------------------------------------
+    // =========================================================
     // BENCHMARK RESULT
-    // ---------------------------------------------------------
+    // =========================================================
 
     private data class RunResult(
 
